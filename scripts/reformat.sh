@@ -1,5 +1,10 @@
 #!/bin/bash
 
+#if [ $# -eq 0 ]; then
+#    echo "No arguments provided"
+#    exit 1
+#fi
+
 # NOTE: The directories for each participant and each session must
 # exist before running these scripts. To make, run something like
 # $ mkdir P{001..073}/{PRE,POST,TEST01,TEST02,TEST03,TEST04,TEST05,TEST06,TEST07,TEST08}
@@ -8,12 +13,15 @@
 # WITH EXISTING DATA, YOU MIGHT WIPE THAT DATA
 shopt -s dotglob
 # For each participant
-for i in {001..073}
+for p in {001..073}
 do
 	# For each session
-	for p in {PRE,POST,TEST01,TEST02,TEST03,TEST04,TEST05,TEST06,TEST07,TEST08}
+	for s in {PRE,POST,TEST01,TEST02,TEST03,TEST04,TEST05,TEST06,TEST07,TEST08}
 	do
 
+	  cp "/home/jason/hubbs/project_verbio/data/new_annotations/${s}/Annotation/${s}_P${p}_annotation.xlsx" "/home/jason/hubbs/project_verbio/data/raw_data/P${p}/${s}/MANUAL_ANNOTATION_PPT.xlsx"
+
+    #mv "$1/P${i}/${p}/MANUAL_ANNOTATION_PPT.wav" "$1/P${i}/${p}/MANUAL_ANNOTATION_PPT.xlsx"
 
 		# for t in {2sec,5sec,10sec}
 		# do
@@ -62,7 +70,5 @@ do
 		# # Copy E4
 		# cp "Akansha/extracted_data/E4/${p}/${t}/P${i}_E4_feature_PPT.xlsx" "layout/P${i}/${p}/E4_${t}.xlsx"
 		
-		done
 	done
-done 	
-
+done
