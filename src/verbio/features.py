@@ -5,6 +5,37 @@ import scipy
 
 from verbio import utils, preprocessing, settings
 
+def eda_features_sample(signal, sr):
+    order = 4
+    w0 = 1.5
+    w0 = 2 * np.array(w0) / sr
+
+    signal = nk.signal_sanitize(signal)
+    b, a = scipy.signal.butter(N=order, Wn=w0, btype='lowpass', analog=False, output='ba')
+    filtered = scipy.signal.filtfilt(b, a, signal)
+
+    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=48)
+
+    decomp = nk.eda_phasic(cleaned, sampling_rate=sr)
+
+    peaks, info = nk.eda_peaks(
+        decomp['EDA_Phasic'].values,
+        sampling_rate=sr,
+        method='biosppy',
+        amplitude_min=0.1
+    )
+
+    df = pd.DataFrame()
+
+    df['SCL'] = np.mean(decomp['EDA_Tonic'].to_numpy())
+    df['SCR_Onsets'] = np.sum(peaks['SCR_Onsets'].to_numpy())
+    df['SCR_Peaks'] = np.sum(peaks['SCR_Peaks'].to_numpy())
+
+    scr_amps = peaks['SCR_Amplitude'].to_numpy()
+    df['SCR_Amplitude'] = np.mean(scr_amps[np.nonzero(scr_amps)]) if len(np.nonzero(scr_amps)[0]) > 0 else 0.0
+
+    return df
+
 def eda_features(signal, times, sr, win_len, win_stride):
     """
 
