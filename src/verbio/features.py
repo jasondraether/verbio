@@ -5,6 +5,14 @@ import scipy
 
 from verbio import utils, preprocessing, settings
 
+def bvp_features(signal, sr):
+    info, _ = nk.ppg_process(frame, 64)
+    hr = info['PPG_Rate'].to_numpy()
+    hr_gradient = gradient(hr)
+    df = pd.DataFrame({'hr':hr, 'hr_grad':hr_gradient})
+    return df
+
+
 def eda_features_sample(signal, sr):
     order = 4
     w0 = 1.5
@@ -14,7 +22,7 @@ def eda_features_sample(signal, sr):
     b, a = scipy.signal.butter(N=order, Wn=w0, btype='lowpass', analog=False, output='ba')
     filtered = scipy.signal.filtfilt(b, a, signal)
 
-    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=48)
+    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=10)
 
     decomp = nk.eda_phasic(cleaned, sampling_rate=sr)
 
@@ -24,15 +32,14 @@ def eda_features_sample(signal, sr):
         method='biosppy',
         amplitude_min=0.1
     )
-
     df = pd.DataFrame()
 
-    df['SCL'] = np.mean(decomp['EDA_Tonic'].to_numpy())
-    df['SCR_Onsets'] = np.sum(peaks['SCR_Onsets'].to_numpy())
-    df['SCR_Peaks'] = np.sum(peaks['SCR_Peaks'].to_numpy())
+    df['SCL'] = [np.mean(decomp['EDA_Tonic'].to_numpy())]
+    df['SCR_Onsets'] = [np.sum(peaks['SCR_Onsets'].to_numpy())]
+    df['SCR_Peaks'] = [np.sum(peaks['SCR_Peaks'].to_numpy())]
 
     scr_amps = peaks['SCR_Amplitude'].to_numpy()
-    df['SCR_Amplitude'] = np.mean(scr_amps[np.nonzero(scr_amps)]) if len(np.nonzero(scr_amps)[0]) > 0 else 0.0
+    df['SCR_Amplitude'] = [np.mean(scr_amps[np.nonzero(scr_amps)]) if len(np.nonzero(scr_amps)[0]) > 0 else 0.0]
 
     return df
 
@@ -212,7 +219,7 @@ def _gradient(x):
     :param x: Array of numbers
     :return: Gradient of input array as floats
     """
-    return np.gradient(x, axis=0, dtype='float64')
+    return np.gradient(x, axis=0)
 
 def _gradient_df(df):
     """
