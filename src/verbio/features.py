@@ -2,111 +2,94 @@ import numpy as np
 import neurokit2 as nk
 import pandas as pd
 import scipy
+import math
 
 from verbio import utils, preprocessing, settings
 
-def bvp_features(signal, sr):
-    info, _ = nk.ppg_process(frame, 64)
+def bvp_features_sample(signal, sr):
+    info, _ = nk.ppg_process(signal, sr)
     hr = info['PPG_Rate'].to_numpy()
     hr_gradient = gradient(hr)
-    df = pd.DataFrame({'hr':hr, 'hr_grad':hr_gradient})
+    df = {}
+    df['HR'] = np.mean(hr)
+    df['HR_Grad'] = np.mean(hr_gradient)
     return df
 
 
-def eda_features_sample(signal, sr):
-    order = 4
-    w0 = 1.5
-    w0 = 2 * np.array(w0) / sr
-
-    signal = nk.signal_sanitize(signal)
-    b, a = scipy.signal.butter(N=order, Wn=w0, btype='lowpass', analog=False, output='ba')
-    filtered = scipy.signal.filtfilt(b, a, signal)
-
-    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=10)
-
-    decomp = nk.eda_phasic(cleaned, sampling_rate=sr)
-
-    peaks, info = nk.eda_peaks(
-        decomp['EDA_Phasic'].values,
-        sampling_rate=sr,
-        method='biosppy',
-        amplitude_min=0.1
+def bvp_features(signal, times, sr, win_len, win_stride):
+    bvp_windows = preprocessing.window_timed(
+        signal,
+        times,
+        win_len,
+        win_stride,
+        lambda x: np.array(x)
     )
-    df = pd.DataFrame()
-
-    df['SCL'] = [np.mean(decomp['EDA_Tonic'].to_numpy())]
-    df['SCR_Onsets'] = [np.sum(peaks['SCR_Onsets'].to_numpy())]
-    df['SCR_Peaks'] = [np.sum(peaks['SCR_Peaks'].to_numpy())]
-
-    scr_amps = peaks['SCR_Amplitude'].to_numpy()
-    df['SCR_Amplitude'] = [np.mean(scr_amps[np.nonzero(scr_amps)]) if len(np.nonzero(scr_amps)[0]) > 0 else 0.0]
-
-    return df
-
-def eda_features(signal, times, sr, win_len, win_stride):
-    """
-
-    :param signal:
-    :param times:
-    :param sr:
-    :param win_len:
-    :param win_stride:
-    :return:
-    """
-    order = 4
-    w0 = 1.5
-    w0 = 2 * np.array(w0) / sr
-
-    signal = nk.signal_sanitize(signal)
-    b, a = scipy.signal.butter(N=order, Wn=w0, btype='lowpass', analog=False, output='ba')
-    filtered = scipy.signal.filtfilt(b, a, signal)
-
-    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=48)
-
-    decomp = nk.eda_phasic(cleaned, sampling_rate=sr)
-
-    peaks, info = nk.eda_peaks(
-        decomp['EDA_Phasic'].values,
-        sampling_rate=sr,
-        method='biosppy',
-        amplitude_min=0.1
-    )
-
-    df = pd.DataFrame(
+    proc_windows = [bvp_features_sample(x, sr) for x in bvp_windows]
+    hr_df = pd.DataFrame(
         {
-            'SCL': preprocessing.window_timed(
-                decomp['EDA_Tonic'].to_numpy(),
-                times,
-                win_len,
-                win_stride,
-                lambda x: np.mean(x)
-            ),
-            'SCR_Amplitude': preprocessing.window_timed(
-                peaks['SCR_Amplitude'].to_numpy(),
-                times,
-                win_len,
-                win_stride,
-                lambda x: np.mean(x[np.nonzero(x)]) if len(np.nonzero(x)[0]) > 0 else 0
-            ),
-            'SCR_Onsets': preprocessing.window_timed(
-                peaks['SCR_Onsets'].to_numpy(),
-                times,
-                win_len,
-                win_stride,
-                lambda x: np.sum(x)
-            ),
-            'SCR_Peaks': preprocessing.window_timed(
-                peaks['SCR_Peaks'].to_numpy(),
-                times,
-                win_len,
-                win_stride,
-                lambda x: np.sum(x)
-            ),
-
+            'HR': [x['HR'] for x in proc_windows],
+            'HR_Grad': [x['HR_Grad'] for x in proc_windows]
         }
     )
+    return hr_df
+
+
+def eda_features_sample(signal, sr, filter_size):
+    order = 4
+    w0 = 1.5
+    w0 = 2 * np.array(w0) / sr
+
+    signal = nk.signal_sanitize(signal)
+    b, a = scipy.signal.butter(N=order, Wn=w0, btype='lowpass', analog=False, output='ba')
+    filtered = scipy.signal.filtfilt(b, a, signal)
+
+    cleaned = nk.signal_smooth(filtered, method='convolution', kernel='blackman', size=filter_size)
+
+    decomp = nk.eda_phasic(cleaned, sampling_rate=sr)
+
+    peaks, info = nk.eda_peaks(
+        decomp['EDA_Phasic'].values,
+        sampling_rate=sr,
+        method='biosppy',
+        amplitude_min=0.1
+    )
+    df = {}
+
+    df['SCL'] = np.mean(decomp['EDA_Tonic'].to_numpy())
+    if math.isnan(df['SCL']): df['SCL'] = 0.0
+    
+    df['SCR_Onsets'] = np.sum(peaks['SCR_Onsets'].to_numpy())
+    if math.isnan(df['SCR_Onsets']): df['SCR_Onsets'] = 0
+
+
+    df['SCR_Peaks'] = np.sum(peaks['SCR_Peaks'].to_numpy())
+    if math.isnan(df['SCR_Peaks']): df['SCR_Peaks'] = 0
+
+    scr_amps = peaks['SCR_Amplitude'].to_numpy()
+    df['SCR_Amplitude'] = np.mean(scr_amps[np.nonzero(scr_amps)]) if len(np.nonzero(scr_amps)[0]) > 0 else 0.0
+    if math.isnan(df['SCR_Amplitude']): df['SCR_Amplitude'] = 0.0
+
     return df
 
+
+def eda_features(signal, times, sr, win_len, win_stride, filter_size):
+    eda_windows = preprocessing.window_timed(
+        signal,
+        times,
+        win_len,
+        win_stride,
+        lambda x: np.array(x)
+    )
+    proc_windows = [eda_features_sample(x, sr, filter_size) for x in eda_windows]
+    hr_df = pd.DataFrame(
+        {
+            'SCL': [x['SCL'] for x in proc_windows],
+            'SCR_Onsets': [x['SCR_Onsets'] for x in proc_windows],
+            'SCR_Peaks': [x['SCR_Peaks'] for x in proc_windows],
+            'SCR_Amplitude': [x['SCR_Amplitude'] for x in proc_windows]
+        }
+    )
+    return hr_df
 
 def get_audio_features(signal, sr, win_len, win_stride):
 
@@ -133,12 +116,6 @@ def get_audio_features(signal, sr, win_len, win_stride):
         samples_per_skip,
         lambda x: smile.process_signal(x, sr),
     )
-
-    # if feature_level == 'LLDs':
-    #     # Since OpenSmile doesn't window for us, we just do it here by taking the mean
-    #     for i, df in enumerate(windowed_dfs):
-    #         df = df.reset_index(drop=True).astype('float64')
-    #         windowed_dfs[i] = df.mean(axis=0).to_frame().T
 
     n_windows = len(windowed_dfs)  # sketchy...
     start_times = np.arange(0.0, (frame_skip * n_windows), frame_skip)
